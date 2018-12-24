@@ -5,12 +5,8 @@ import games.model.Affiliation;
 import games.model.Board;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.Map;
+import java.net.*;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class Server {
@@ -27,7 +23,8 @@ public class Server {
 
 	private int serverListenPort;
 
-	private Map<InetAddress, Affiliation> addressToPlayer = new HashMap<>(MAX_PLAYERS);
+	private Map<InetSocketAddress, PlayerInfo> addressToPlayer = new HashMap<>(MAX_PLAYERS);
+	private Set<Affiliation> assignedPlayers = new HashSet<>();
 
 	private Map<Affiliation, ActionType> currentActions = new EnumMap<>(Affiliation.class);
 	private Map<Affiliation, ActionType> prevActions = new EnumMap<>(Affiliation.class);
@@ -81,10 +78,10 @@ public class Server {
 		StringBuilder sb = serializer.serializeBoard(board);
 		DatagramPacket syncPacket = new DatagramPacket(syncBuf, sb.length());
 		Protocol.prepareMsg(syncPacket, Protocol.PacketType.SYNC, sb.toString());
-		for(InetAddress clientAddress : addressToPlayer.keySet()) {
+		for(PlayerInfo player : addressToPlayer.values()) {
 			try {
-				syncPacket.setAddress(clientAddress);
-				syncPacket.setPort(Protocol.DEFAULT_CLIENT_LISTEN_PORT);
+				syncPacket.setAddress(player.getAddress());
+				syncPacket.setPort(player.responseToPort);
 				syncSocket.send(syncPacket);
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -100,36 +97,48 @@ public class Server {
 		System.out.println("Server start listening");
 		while(true) {
 			serverSocket.receive(receivePacket);
-			InetAddress clientAddress = receivePacket.getAddress();
+			InetSocketAddress clientFromAddress = (InetSocketAddress) receivePacket.getSocketAddress();
 			Protocol.PacketType packetType = Protocol.readPacketType(receivePacket);
 			try {
 				switch (packetType) {
 					case JOIN:
 						//TODO check game version
-						if(addressToPlayer.containsKey(clientAddress)) {
-							sendResponse(responsePacket, clientAddress, Protocol.PacketType.JOINED, addressToPlayer.get(clientAddress).getValue());
+						int clientResponsePort = Protocol.readJoinPort(receivePacket);
+						if(clientResponsePort <= 0) {
+							//ignore bad port, cannot send response anyway
+							break;
+						}
+						if(addressToPlayer.containsKey(clientFromAddress)) {
+							PlayerInfo playerInfo = addressToPlayer.get(clientFromAddress);
+							playerInfo.responseToPort = clientResponsePort;
+							sendResponse(responsePacket, playerInfo.getAddress(), playerInfo.responseToPort, Protocol.PacketType.JOINED, addressToPlayer.get(clientFromAddress).affiliation.getValue());
 						} else if (addressToPlayer.size() < MAX_PLAYERS) {
 							Affiliation newPlayer;
-							if (!addressToPlayer.values().contains(Affiliation.PLAYER1)) {
+							if (!assignedPlayers.contains(Affiliation.PLAYER1)) {
 								newPlayer = Affiliation.PLAYER1;
-							} else if (!addressToPlayer.values().contains(Affiliation.PLAYER2)) {
+							} else if (!assignedPlayers.contains(Affiliation.PLAYER2)) {
 								newPlayer = Affiliation.PLAYER2;
 							} else {
 								throw new RuntimeException("Less than two players but none free");
 							}
-							addressToPlayer.put(clientAddress, newPlayer);
-							sendResponse(responsePacket, clientAddress, Protocol.PacketType.JOINED, newPlayer.getValue());
+							assignedPlayers.add(newPlayer);
+							PlayerInfo playerInfo = new PlayerInfo(clientFromAddress, clientResponsePort, newPlayer);
+							addressToPlayer.put(clientFromAddress, playerInfo);
+							sendResponse(responsePacket, playerInfo.getAddress(), playerInfo.responseToPort, Protocol.PacketType.JOINED, newPlayer.getValue());
 						} else {
-							sendResponse(responsePacket, clientAddress, Protocol.PacketType.DENY, "Server is full");
+							sendResponse(responsePacket, clientFromAddress.getAddress(), clientResponsePort, Protocol.PacketType.DENY, "Server is full");
 						}
 						break;
 					case LEAVE:
-						addressToPlayer.remove(receivePacket.getAddress());
+						if(addressToPlayer.containsKey((InetSocketAddress) receivePacket.getSocketAddress())) {
+							PlayerInfo playerInfo = addressToPlayer.remove((InetSocketAddress) receivePacket.getSocketAddress());
+							assignedPlayers.remove(playerInfo.affiliation);
+						}
 						break;
 					case ACTION:
-						ActionType actionType = Protocol.readActionType(receivePacket);
-						if(addressToPlayer.containsKey(clientAddress)) {
-							currentActions.put(addressToPlayer.get(clientAddress), actionType);
+						if(addressToPlayer.containsKey(clientFromAddress)) {
+							ActionType actionType = Protocol.readActionType(receivePacket);
+							currentActions.put(addressToPlayer.get(clientFromAddress).affiliation, actionType);
 						}
 						break;
 					case DENY:
@@ -146,14 +155,30 @@ public class Server {
 		}
 	}
 
-	private void sendResponse(DatagramPacket responsePacket, InetAddress clientAddress, Protocol.PacketType packetType, int message) throws IOException {
-		sendResponse(responsePacket, clientAddress, packetType, Integer.toString(message));
+	private void sendResponse(DatagramPacket responsePacket, InetAddress clientAddress, int clienPort, Protocol.PacketType packetType, int message) throws IOException {
+		sendResponse(responsePacket, clientAddress, clienPort, packetType, Integer.toString(message));
 	}
 
-	private void sendResponse(DatagramPacket responsePacket, InetAddress clientAddress, Protocol.PacketType packetType, String message) throws IOException {
+	private void sendResponse(DatagramPacket responsePacket, InetAddress clientAddress, int clienPort, Protocol.PacketType packetType, String message) throws IOException {
 		responsePacket.setAddress(clientAddress);
-		responsePacket.setPort(Protocol.DEFAULT_CLIENT_LISTEN_PORT);
+		responsePacket.setPort(clienPort);
 		Protocol.prepareMsg(responsePacket, packetType, message);
 		serverSocket.send(responsePacket);
+	}
+
+	private static class PlayerInfo {
+		InetSocketAddress clientFromAddress;
+		int responseToPort;
+		Affiliation affiliation;
+
+		PlayerInfo(InetSocketAddress clientFromAddress, int responseToPort, Affiliation affiliation) {
+			this.clientFromAddress = clientFromAddress;
+			this.responseToPort = responseToPort;
+			this.affiliation = affiliation;
+		}
+
+		InetAddress getAddress() {
+			return clientFromAddress.getAddress();
+		}
 	}
 }

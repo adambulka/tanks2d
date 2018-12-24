@@ -24,7 +24,7 @@ public class Client {
 
 	private InetAddress serverAddress;
 	private int serverListenPort;
-	private int clienListenPort;
+	private int clientListenPort;
 
 	private Serializer serializer = new Serializer();
 
@@ -44,7 +44,7 @@ public class Client {
 	public Client(InetAddress serverAddress, int serverListenPort, int clientListenPort) {
 		this.serverAddress = serverAddress;
 		this.serverListenPort = serverListenPort;
-		this.clienListenPort = clientListenPort;
+		this.clientListenPort = clientListenPort;
 		try {
 			currentBoard = new Board();
 			nextBoard = new Board();
@@ -58,7 +58,7 @@ public class Client {
 
 	public void start() {
 		try {
-			sender.schedule(() -> send(Protocol.PacketType.JOIN), 1, TimeUnit.SECONDS);
+			sender.schedule(() -> send(Protocol.PacketType.JOIN, clientListenPort), 1, TimeUnit.SECONDS);
 			listen();
 		} catch (Exception e) {
 			e.printStackTrace();

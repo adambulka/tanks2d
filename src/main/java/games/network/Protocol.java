@@ -58,6 +58,15 @@ public class Protocol {
 		return ActionType.getEnumForValue(num);
 	}
 
+	public static int readJoinPort(DatagramPacket packet) {
+		int num = 0;
+		byte[] data = packet.getData();
+		for(int i = PacketType.JOIN.beginText.length(); i < packet.getLength(); i++) {
+			num = num * 10 + byteToDigit(data[i]);
+		}
+		return num;
+	}
+
 	public static Affiliation readJoinedPlayer(DatagramPacket packet) {
 		int num = 0;
 		byte[] data = packet.getData();
