@@ -1,5 +1,7 @@
 package games.model;
 
+import games.model.token.*;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,14 +16,14 @@ public class Board {
 
 	private BoardSquare[][] squares = new BoardSquare[BOARD_LENGHT][BOARD_LENGHT];
 
-	private GameObjectPool gameObjectPool = GameObjectPool.INSTANCE;
+	private TokenPool tokenPool = TokenPool.INSTANCE;
 
-	private Map<Affiliation, GameObject> playerToTank = new HashMap<>();
+	private Map<Affiliation, Tank> playerToTank = new HashMap<>();
 
 	private long currentCycle = 0;
 
-	private List<GameObject> movingObjects = new ArrayList<>(1000);
-	private List<GameObject> removalList = new ArrayList<GameObject>(1000);
+	private List<MovingToken> movingObjects = new ArrayList<>(1000);
+	private List<Token> removalList = new ArrayList<>(1000);
 
 	public Board() {
 		for(int i = 0; i < BOARD_LENGHT; i++) {
@@ -50,7 +52,7 @@ public class Board {
 	 * @param affiliation
 	 * @return
 	 */
-	public GameObject getPlayer(Affiliation affiliation) {
+	public Tank getPlayer(Affiliation affiliation) {
 		if(!affiliation.isPlayer()) {
 			throw new RuntimeException("Get player for non player affiliation");
 		}
@@ -68,43 +70,62 @@ public class Board {
 		}
 	}
 
-	public void addObject(GameObjectType gameObjectType, Direction direction, Affiliation affiliation, ActionType actionType, int currentFrame, int maxFrame, int x, int y) {
-		GameObject gameObject = gameObjectPool.getGameObject(gameObjectType, direction, affiliation, actionType, x, y);
-		gameObject.getAction().setCurrentFrame(currentFrame);
-		gameObject.getAction().setMaxFrame(maxFrame);
-		squares[x][y].addObject(gameObject);
-		if(GameObjectType.TANK.equals(gameObjectType) && affiliation.isPlayer()) {
-			playerToTank.put(affiliation, gameObject);
+	public void addWall(int posX, int posY) {
+		Wall wall = tokenPool.getWall();
+		wall.setPosition(posX, posY);
+		squares[posX][posY].addToken(wall);
+	}
+
+	public void addMoveLock(int posX, int posY) {
+		MoveLock moveLock = tokenPool.getMoveLock();
+		moveLock.setPosition(posX, posY);
+		squares[posX][posY].addToken(moveLock);
+	}
+
+	public void addTank(Direction direction, Affiliation affiliation, ActionType actionType, int currentFrame, int maxFrame, int posX, int posY, int devX, int devY) {
+		Tank tank = tokenPool.getTank();
+		tank.setDirection(direction);
+		tank.setAffiliation(affiliation);
+		tank.getAction().setActionType(actionType);
+		tank.getAction().setCurrentFrame(currentFrame);
+		tank.getAction().setMaxFrame(maxFrame);
+		tank.setPosition(posX, posY);
+		tank.setDevPosition(devX, devY);
+		squares[posX][posY].addToken(tank);
+
+		if(affiliation.isPlayer()) {
+			playerToTank.put(affiliation, tank);
 		}
+	}
+
+	public void addMissile(Direction direction, Affiliation affiliation, int posX, int posY, int devX, int devY) {
+		Missile missile = tokenPool.getMissile();
+		missile.setDirection(direction);
+		missile.setAffiliation(affiliation);
+		missile.setPosition(posX, posY);
+		missile.setDevPosition(devX, devY);
+		squares[posX][posY].addToken(missile);
 	}
 
 	private void setupWalls() {
 		int max = BOARD_LENGHT - 1;
 		for(int i = 1; i < max; i++) {
-			squares[i][0].addObject(gameObjectPool.getWall(i, 0));
-			squares[0][i].addObject(gameObjectPool.getWall(0, i));
-			squares[i][max].addObject(gameObjectPool.getWall(i, max));
-			squares[max][i].addObject(gameObjectPool.getWall(max, i));
+			addWall(i, 0);
+			addWall(0, i);
+			addWall(i, max);
+			addWall(max, i);
 		}
-		squares[0][0].addObject(gameObjectPool.getWall(0, 0));
-		squares[0][max].addObject(gameObjectPool.getWall(0, max));
-		squares[max][0].addObject(gameObjectPool.getWall(max, 0));
-		squares[max][max].addObject(gameObjectPool.getWall(max, max));
+		addWall(0, 0);
+		addWall(0, max);
+		addWall(max, 0);
+		addWall(max, max);
 	}
 
 	//TODO remove after tests
 	public void setTestEnvironemt() {
-		GameObject player1 = gameObjectPool.getTank(Direction.RIGHT, Affiliation.PLAYER1, 1, 1);
-		playerToTank.put(Affiliation.PLAYER1, player1);
-		squares[1][1].addObject(player1);
-
-		GameObject player2 = gameObjectPool.getTank(Direction.LEFT, Affiliation.PLAYER2, 18, 18);
-		playerToTank.put(Affiliation.PLAYER2, player2);
-		squares[18][18].addObject(player2);
-
-		GameObject enemy1 = gameObjectPool.getTank(Direction.DOWN, Affiliation.ENEMY, 10, 10);
-		squares[10][10].addObject(enemy1);
-
+		addTank(Direction.RIGHT, Affiliation.PLAYER1, ActionType.NONE, 0, 0, 1, 1, 0, 0);
+		addTank(Direction.LEFT, Affiliation.PLAYER2, ActionType.NONE, 0, 0, 18, 18, 0, 0);
+		addTank(Direction.DOWN, Affiliation.ENEMY, ActionType.NONE, 0, 0, 10, 10, 0, 0);
 	}
 
 	public void cycle(Map<Affiliation, ActionType> actions) {
@@ -112,8 +133,8 @@ public class Board {
 		gatherMovingObjects();
 		continueActions();
 		missileCollision();
-		for(GameObject gameObject : removalList) {
-			removeObjectFromBoard(gameObject);
+		for(Token token : removalList) {
+			removeObjectFromBoard(token);
 		}
 		movingObjects.clear();
 		removalList.clear();
@@ -125,10 +146,10 @@ public class Board {
 			Affiliation player = (Affiliation) entry.getKey();
 			ActionType actionType = (ActionType) entry.getValue();
 			if(playerToTank.containsKey(player)) {
-				GameObject tank = playerToTank.get(player);
+				Tank tank = playerToTank.get(player);
 				if(tank.canPerformNewAction()) {
 					switch (actionType) {
-						case MOVE_OUT:
+						case MOVE:
 							tank.getAction().initTankMoveOut();
 							break;
 						case TURN_UP:
@@ -139,7 +160,6 @@ public class Board {
 								tank.getAction().initTankTurn(actionType);
 							}
 							break;
-						case MOVE_IN:
 						case NONE:
 							//do nothing
 							break;
@@ -160,11 +180,11 @@ public class Board {
 		int max = BOARD_LENGHT;
 		for(int i = 0; i < max; i++) {
 			for(int j = 0; j < max; j++) {
-				ArrayList<GameObject> list = squares[i][j].getGameObjects();
-				for(GameObject gameObject : list) {
-					GameObjectType type = gameObject.getGameObjectType();
-					if(GameObjectType.TANK.equals(type) || GameObjectType.MISSILE.equals(type)) {
-						movingObjects.add(gameObject);
+				ArrayList<Token> list = squares[i][j].getTokens();
+				for(Token token : list) {
+					TokenType type = token.getTokenType();
+					if(TokenType.TANK.equals(type) || TokenType.MISSILE.equals(type)) {
+						movingObjects.add((MovingToken) token);
 					}
 				}
 			}
@@ -172,19 +192,20 @@ public class Board {
 	}
 
 	private void continueActions() {
-		for(GameObject gameObject : movingObjects) {
-			continueAction(gameObject);
+		for(MovingToken token : movingObjects) {
+			continueAction(token);
 		}
 	}
 
 	private void missileCollision() {
-		for(GameObject missile : movingObjects) {
-			if(GameObjectType.MISSILE.equals(missile.getGameObjectType()) && !removalList.contains(missile)) {
-				for(GameObject other : squares[missile.posX][missile.posY].getGameObjects()) {
-					if(GameObjectType.WALL.equals(other.getGameObjectType())) {
+		for(MovingToken missile : movingObjects) {
+			if(TokenType.MISSILE.equals(missile.getTokenType()) && !removalList.contains(missile)) {
+				for(Token other : squares[missile.getPosition().getX()][missile.getPosition().getY()].getTokens()) {
+					if(TokenType.WALL.equals(other.getTokenType())) {
 						removalList.add(missile);
 					} else if(Boolean.logicalXor(missile.getAffiliation().isPlayer(), other.getAffiliation().isPlayer())
-							&& GameObjectType.TANK.equals(other.getGameObjectType())) {
+							&& TokenType.TANK.equals(other.getTokenType())) {
+						//TODO damage the other tank instead of destroying it
 						removalList.add(missile);
 						removalList.add(other);
 					}
@@ -193,14 +214,15 @@ public class Board {
 		}
 	}
 
-	private void removeObjectFromBoard(GameObject gameObject) {
-		squares[gameObject.posX][gameObject.posY].removeObject(gameObject);
-		gameObjectPool.returnToPool(gameObject);
-		if(GameObjectType.TANK.equals(gameObject.getGameObjectType())) {
-			if(ActionType.MOVE_OUT.equals(gameObject.getAction().getActionType())) {
-				int moveX = gameObject.posX;
-				int moveY = gameObject.posY;
-				switch (gameObject.getDirection()) {
+	private void removeObjectFromBoard(Token token) {
+		squares[token.getPosition().getX()][token.getPosition().getY()].removeToken(token);
+		tokenPool.returnToPool(token);
+		if(TokenType.TANK.equals(token.getTokenType())) {
+			Tank tank = (Tank) token;
+			if(ActionType.MOVE.equals(tank.getAction().getActionType())) {
+				int moveX = token.getPosition().getX();
+				int moveY = token.getPosition().getY();
+				switch (tank.getDirection()) {
 					case UP:
 						moveY--;
 						break;
@@ -214,76 +236,66 @@ public class Board {
 						moveX--;
 						break;
 				}
-				GameObject moveLock = squares[moveX][moveY].removeMoveLock();
-				gameObjectPool.returnToPool(moveLock);
+				MoveLock moveLock = squares[moveX][moveY].removeMoveLock();
+				tokenPool.returnToPool(moveLock);
 			}
-			if(gameObject.getAffiliation().isPlayer()) {
-				playerToTank.remove(gameObject.getAffiliation());
+			if(token.getAffiliation().isPlayer()) {
+				playerToTank.remove(token.getAffiliation());
 			}
 		}
 	}
 
-	private void continueAction(GameObject gameObject) {
-		GameObjectType gameObjectType = gameObject.getGameObjectType();
-		if(GameObjectType.MISSILE.equals(gameObjectType)) {
-			continueActionMissile(gameObject);
-		} else if(GameObjectType.TANK.equals(gameObjectType)) {
-			continueActionTank(gameObject);
+	private void continueAction(MovingToken token) {
+		TokenType tokenType = token.getTokenType();
+		if(TokenType.MISSILE.equals(tokenType)) {
+			continueActionMissile((Missile) token);
+		} else if(TokenType.TANK.equals(tokenType)) {
+			continueActionTank((Tank) token);
 		} else {
 			throw new RuntimeException("Only tanks and missiles have actions");
 		}
 	}
 
-	private void continueActionMissile(GameObject missile) {
-		Action action = missile.getAction();
-		ActionType actionType = action.getActionType();
-		if(ActionType.MOVE_OUT.equals(actionType)) {
-			if(action.isLastFrame()) {
-				if(isOutOfBoundaries(missile.getDirection(), missile.posX, missile.posY)) {
-					removalList.add(missile);
-				} else {
-					action.transitionToMissileMoveIn();
-					moveObject(missile);
-				}
-			} else {
-				action.increaseCurrentFrame();
-			}
-		} else if(ActionType.MOVE_IN.equals(actionType)) {
-			if(action.isLastFrame()) {
-				action.transitionToMissileMoveOut();
-			} else {
-				action.increaseCurrentFrame();
-			}
+	private void continueActionMissile(Missile missile) {
+		if(willChangeSquare(missile) && isOutOfBoundaries(missile.getDirection(), missile.getPosition().getX(), missile.getPosition().getY())) {
+			removalList.add(missile);
 		} else {
-			throw new RuntimeException("Missiles can only move");
+			moveDev(missile);
 		}
 	}
 
-	private void continueActionTank(GameObject tank) {
+	private boolean isOutOfBoundaries(Direction direction, int posX, int posY) {
+		int moveX = posX;
+		int moveY = posY;
+		if(Direction.DOWN.equals(direction)) {
+			moveY++;
+		} else if(Direction.UP.equals(direction)) {
+			moveY--;
+		} else if(Direction.LEFT.equals(direction)) {
+			moveX--;
+		} else if(Direction.RIGHT.equals(direction)) {
+			moveX++;
+		}
+		return moveX < 0 || moveY < 0 || moveX >= BOARD_LENGHT || moveY >= BOARD_LENGHT;
+	}
+
+	private void continueActionTank(Tank tank) {
 		Action action = tank.getAction();
 		ActionType actionType = action.getActionType();
 		switch(actionType) {
-			case MOVE_OUT:
+			case MOVE:
 				if(action.getCurrentFrame() == 0) {
 					if(!tryMoveTankWithLock(tank)) {
 						action.transitionToNone();
-					} else {
-						action.increaseCurrentFrame();
+						return;
 					}
-				} else if(action.isLastFrame()) {
-					action.transitionToTankMoveIn();
-					moveObject(tank);
-					GameObject moveLock = squares[tank.posX][tank.posY].removeMoveLock();
-					gameObjectPool.returnToPool(moveLock);
-				} else {
-					action.increaseCurrentFrame();
 				}
-				break;
-			case MOVE_IN:
-				if(action.isLastFrame()) {
+				if(willPassSquareCenter(tank)) {
 					action.transitionToNone();
+					tank.setDevPosition(0, 0);
 				} else {
 					action.increaseCurrentFrame();
+					moveDev(tank);
 				}
 				break;
 			case TURN_UP:
@@ -306,9 +318,7 @@ public class Board {
 				} else {
 					action.increaseCurrentFrame();
 					if(action.getCurrentFrame() == 1) {
-						GameObject missile = gameObjectPool.getMissile(tank.getDirection(), tank.getAffiliation(), tank.posX, tank.posY);
-						missile.getAction().initMissileMoveOut();
-						squares[tank.posX][tank.posY].addObject(missile);
+						addMissile(tank.getDirection(), tank.getAffiliation(), tank.getPosition().getX(), tank.getPosition().getY(), 0, 0);
 					}
 				}
 				break;
@@ -317,54 +327,135 @@ public class Board {
 		}
 	}
 
-	private boolean isOutOfBoundaries(Direction direction, int posX, int posY) {
-		int moveX = posX;
-		int moveY = posY;
-		if(Direction.DOWN.equals(direction)) {
-			moveY++;
-		} else if(Direction.UP.equals(direction)) {
-			moveY--;
-		} else if(Direction.LEFT.equals(direction)) {
-			moveX--;
-		} else if(Direction.RIGHT.equals(direction)) {
-			moveX++;
+	private boolean willPassSquareCenter(MovingToken movingToken) {
+		int devX = movingToken.getDevPosition().getX();
+		int devY = movingToken.getDevPosition().getY();
+		switch (movingToken.getDirection()) {
+			case DOWN:
+				if(devY < 0 && devY + movingToken.getSpeed() >= 0) {
+					return true;
+				}
+				break;
+			case UP:
+				if(devY > 0 && devY - movingToken.getSpeed() <= 0) {
+					return true;
+				}
+				break;
+			case RIGHT:
+				if(devX < 0 && devX + movingToken.getSpeed() >= 0) {
+					return true;
+				}
+				break;
+			case LEFT:
+				if(devX > 0 && devX - movingToken.getSpeed() <= 0) {
+					return true;
+				}
+				break;
 		}
-		return moveX < 0 || moveY < 0 || moveX >= BOARD_LENGHT || moveY >= BOARD_LENGHT;
+		return false;
 	}
 
-	private void moveObject(GameObject gameObject) {
-		squares[gameObject.posX][gameObject.posY].removeObject(gameObject);
-		if(Direction.DOWN.equals(gameObject.getDirection())) {
-			gameObject.posY++;
-		} else if(Direction.UP.equals(gameObject.getDirection())) {
-			gameObject.posY--;
-		} else if(Direction.LEFT.equals(gameObject.getDirection())) {
-			gameObject.posX--;
-		} else if(Direction.RIGHT.equals(gameObject.getDirection())) {
-			gameObject.posX++;
+	private boolean willChangeSquare(MovingToken movingToken) {
+		int devX = movingToken.getDevPosition().getX();
+		int devY = movingToken.getDevPosition().getY();
+		switch (movingToken.getDirection()) {
+			case DOWN:
+				if(devY + movingToken.getSpeed() >= 100) {
+					return true;
+				}
+				break;
+			case UP:
+				if(devY - movingToken.getSpeed() <= -100) {
+					return true;
+				}
+				break;
+			case RIGHT:
+				if(devX + movingToken.getSpeed() >= 100) {
+					return true;
+				}
+				break;
+			case LEFT:
+				if(devX - movingToken.getSpeed() <= -100) {
+					return true;
+				}
+				break;
 		}
-		squares[gameObject.posX][gameObject.posY].addObject(gameObject);
+		return false;
 	}
 
-	private boolean tryMoveTankWithLock(GameObject gameObject) {
-		int moveX = gameObject.posX;
-		int moveY = gameObject.posY;
-		if(Direction.DOWN.equals(gameObject.getDirection())) {
-			moveY++;
-		} else if(Direction.UP.equals(gameObject.getDirection())) {
-			moveY--;
-		} else if(Direction.LEFT.equals(gameObject.getDirection())) {
-			moveX--;
-		} else if(Direction.RIGHT.equals(gameObject.getDirection())) {
-			moveX++;
+	private void moveDev(MovingToken movingToken) {
+		int devX = movingToken.getDevPosition().getX();
+		int devY = movingToken.getDevPosition().getY();
+		switch (movingToken.getDirection()) {
+			case DOWN:
+				devY = devY + movingToken.getSpeed();
+				break;
+			case UP:
+				devY = devY - movingToken.getSpeed();
+				break;
+			case RIGHT:
+				devX = devX + movingToken.getSpeed();
+				break;
+			case LEFT:
+				devX = devX - movingToken.getSpeed();
+				break;
 		}
-		if(moveX < 0 || moveY < 0 || moveX >= BOARD_LENGHT || moveY >= BOARD_LENGHT) {
+		if(devY > 100) {
+			devY = devY - 200;
+			moveSquare(movingToken);
+		} else if(devY < -100) {
+			devY = 200 + devY;
+			moveSquare(movingToken);
+		} else if(devX > 100) {
+			devX = devX - 200;
+			moveSquare(movingToken);
+		} else if(devX < -100) {
+			devX = 200 + devX;
+			moveSquare(movingToken);
+		}
+		movingToken.setDevPosition(devX, devY);
+	}
+
+	private void moveSquare(MovingToken movingToken) {
+		int x = movingToken.getPosition().getX();
+		int y = movingToken.getPosition().getY();
+		squares[x][y].removeToken(movingToken);
+		if(Direction.DOWN.equals(movingToken.getDirection())) {
+			y++;
+		} else if(Direction.UP.equals(movingToken.getDirection())) {
+			y--;
+		} else if(Direction.LEFT.equals(movingToken.getDirection())) {
+			x--;
+		} else if(Direction.RIGHT.equals(movingToken.getDirection())) {
+			x++;
+		}
+		movingToken.setPosition(x, y);
+		squares[x][y].addToken(movingToken);
+		if(TokenType.TANK.equals(movingToken.getTokenType())) {
+			MoveLock moveLock = squares[x][y].removeMoveLock();
+			tokenPool.returnToPool(moveLock);
+		}
+	}
+
+	private boolean tryMoveTankWithLock(Tank tank) {
+		int x = tank.getPosition().getX();
+		int y = tank.getPosition().getY();
+		if(Direction.DOWN.equals(tank.getDirection())) {
+			y++;
+		} else if(Direction.UP.equals(tank.getDirection())) {
+			y--;
+		} else if(Direction.LEFT.equals(tank.getDirection())) {
+			x--;
+		} else if(Direction.RIGHT.equals(tank.getDirection())) {
+			x++;
+		}
+		if(x < 0 || y < 0 || x >= BOARD_LENGHT || y >= BOARD_LENGHT) {
 			return false;
 		}
-		if(squares[moveX][moveY].containsBlockingObjects()) {
+		if(squares[x][y].containsBlockingObjects()) {
 			return false;
 		} else {
-			squares[moveX][moveY].addObject(gameObjectPool.getMoveLock(moveX, moveY));
+			addMoveLock(x, y);
 			return true;
 		}
 	}

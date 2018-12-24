@@ -2,7 +2,7 @@ package games.model;
 
 public enum ActionType {
 	TURN_UP(1), TURN_RIGHT(2), TURN_DOWN(3), TURN_LEFT(4),
-	MOVE_OUT(5), MOVE_IN(6), SHOT(7), NONE(8);
+	MOVE(5), SHOT(7), NONE(8);
 
 	private int value;
 

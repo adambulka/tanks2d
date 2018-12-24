@@ -1,6 +1,7 @@
 package games.view;
 
 import games.model.*;
+import games.model.token.*;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -8,6 +9,8 @@ import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
+import java.util.HashMap;
+import java.util.Map;
 
 public class BoardView extends JPanel {
 
@@ -17,15 +20,13 @@ public class BoardView extends JPanel {
 	private static final int WHITE = 0xffffffff;
 	private static final int TRANSLUCENT = 0x00ffffff;
 
-	private BufferedImage wall;
-	private BufferedImage empty;
-	private BufferedImage tank;
-	private BufferedImage missile;
+	private BufferedImage wallImage;
+	private BufferedImage emptyImage;
+	private BufferedImage tankImage;
+	private BufferedImage missileImage;
 
-	private BufferedImage tankP1;
-	private BufferedImage tankP2;
-	private BufferedImage missileP1;
-	private BufferedImage missileP2;
+	private Map<Affiliation, BufferedImage> affiliationToTankImage = new HashMap<>();
+	private Map<Affiliation, BufferedImage> affiliationToMissileImage = new HashMap<>();
 
 	private Board board;
 
@@ -39,22 +40,30 @@ public class BoardView extends JPanel {
 	}
 
 	private void loadImages() {
-		wall = loadImage("wall.bmp");
-		empty = loadImage("empty.bmp");
-		tank = loadImage("tank.bmp");
-		missile = loadImage("missile.bmp");
+		wallImage = loadImage("wall.bmp");
+		emptyImage = loadImage("empty.bmp");
+		tankImage = loadImage("tank.bmp");
+		missileImage = loadImage("missile.bmp");
 
-		recolor(missile, NEUTRAL_COLOR);
+		recolor(missileImage, NEUTRAL_COLOR);
 
-		tankP1 = copyImage(tank);
-		recolor(tankP1, Color.GREEN);
-		tankP2 = copyImage(tank);
-		recolor(tankP2, Color.RED);
+		BufferedImage tankP1Image = copyImage(tankImage);
+		recolor(tankP1Image, Color.GREEN);
+		BufferedImage tankP2Image = copyImage(tankImage);
+		recolor(tankP2Image, Color.RED);
 
-		missileP1 = copyImage(missile);
-		recolor(missileP1, Color.GREEN);
-		missileP2 = copyImage(missile);
-		recolor(missileP2, Color.RED);
+		BufferedImage missileP1Image = copyImage(missileImage);
+		recolor(missileP1Image, Color.GREEN);
+		BufferedImage missileP2Image = copyImage(missileImage);
+		recolor(missileP2Image, Color.RED);
+
+		affiliationToTankImage.put(Affiliation.ENEMY, tankImage);
+		affiliationToTankImage.put(Affiliation.PLAYER1, tankP1Image);
+		affiliationToTankImage.put(Affiliation.PLAYER2, tankP2Image);
+
+		affiliationToMissileImage.put(Affiliation.ENEMY, missileImage);
+		affiliationToMissileImage.put(Affiliation.PLAYER1, missileP1Image);
+		affiliationToMissileImage.put(Affiliation.PLAYER2, missileP2Image);
 	}
 
 	private BufferedImage copyImage(BufferedImage image) {
@@ -103,13 +112,13 @@ public class BoardView extends JPanel {
 		BoardSquare[][] squares = board.getSquares();
 		for(int i = 0; i < squares.length; i++) {
 			for(int j = 0; j < squares[i].length; j++) {
-				for(GameObject gameObject : squares[i][j].getGameObjects()) {
-					if(GameObjectType.TANK.equals(gameObject.getGameObjectType())) {
-						drawAt(g, affiliationToTankImage(gameObject.getAffiliation()), i, j, gameObject);
-					} else if(GameObjectType.WALL.equals(gameObject.getGameObjectType())) {
-						drawAt(g, wall, i, j, gameObject);
-					} else if(GameObjectType.MISSILE.equals(gameObject.getGameObjectType())) {
-						drawAt(g, affiliationToMissileImage(gameObject.getAffiliation()), i, j, gameObject);
+				for(Token token : squares[i][j].getTokens()) {
+					if(TokenType.TANK.equals(token.getTokenType())) {
+						drawTank(g, (Tank) token);
+					} else if(TokenType.WALL.equals(token.getTokenType())) {
+						drawWall(g, (Wall) token);
+					} else if(TokenType.MISSILE.equals(token.getTokenType())) {
+						drawMissile(g, (Missile) token);
 					}
 				}
 			}
@@ -117,11 +126,32 @@ public class BoardView extends JPanel {
 		Toolkit.getDefaultToolkit().sync();
 	}
 
-	private void drawAt(Graphics g, BufferedImage image, int x, int y, GameObject gameObject) {
+	private void drawTank(Graphics g, Tank tank) {
+		BufferedImage image = affiliationToTankImage.get(tank.getAffiliation());
+		draw(g, getTransform(tank.getDirection()), image, getDrawX(tank), getDrawY(tank));
+	}
+
+	private void drawMissile(Graphics g, Missile missile) {
+		BufferedImage image = affiliationToMissileImage.get(missile.getAffiliation());
+		draw(g, getTransform(missile.getDirection()), image, getDrawX(missile), getDrawY(missile));
+	}
+
+	private AffineTransformOp getTransform(Direction direction) {
+		AffineTransform at = AffineTransform.getQuadrantRotateInstance(directionToRotationNumber(direction), SQUARE_SIZE_PIXELS / 2, SQUARE_SIZE_PIXELS / 2);
+		return new AffineTransformOp(at, AffineTransformOp.TYPE_BILINEAR);
+	}
+
+	private void drawWall(Graphics g, Wall wall) {
+		draw(g, null, wallImage, wall.getPosition().getX() * SQUARE_SIZE_PIXELS, wall.getPosition().getY() * SQUARE_SIZE_PIXELS);
+	}
+
+	private void draw(Graphics g, AffineTransformOp ato, BufferedImage image, int x, int y) {
 		Graphics2D g2d = (Graphics2D) g;
-		AffineTransform at = AffineTransform.getQuadrantRotateInstance(directionToRotationNumber(gameObject.getDirection()), SQUARE_SIZE_PIXELS / 2, SQUARE_SIZE_PIXELS / 2);
-		AffineTransformOp ato = new AffineTransformOp(at, AffineTransformOp.TYPE_BILINEAR);
-		g2d.drawImage(ato.filter(image, null), x * SQUARE_SIZE_PIXELS, y * SQUARE_SIZE_PIXELS, this);
+		if(ato == null) {
+			g2d.drawImage(image, x, y, this);
+		} else {
+			g2d.drawImage(ato.filter(image, null), x, y, this);
+		}
 	}
 
 	private int directionToRotationNumber(Direction direction) {
@@ -140,25 +170,11 @@ public class BoardView extends JPanel {
 		}
 	}
 
-	private BufferedImage affiliationToTankImage(Affiliation affiliation) {
-		switch (affiliation) {
-			case PLAYER1:
-				return tankP1;
-			case PLAYER2:
-				return tankP2;
-			default:
-				return tank;
-		}
+	private int getDrawX(MovingToken movingToken) {
+		return movingToken.getPosition().getX() * SQUARE_SIZE_PIXELS + movingToken.getDevPosition().getX() * SQUARE_SIZE_PIXELS / 200;
 	}
 
-	private BufferedImage affiliationToMissileImage(Affiliation affiliation) {
-		switch (affiliation) {
-			case PLAYER1:
-				return missileP1;
-			case PLAYER2:
-				return missileP2;
-			default:
-				return missile;
-		}
+	private int getDrawY(MovingToken movingToken) {
+		return movingToken.getPosition().getY() * SQUARE_SIZE_PIXELS + movingToken.getDevPosition().getY() * SQUARE_SIZE_PIXELS / 200;
 	}
 }

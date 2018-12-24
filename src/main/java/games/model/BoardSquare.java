@@ -1,43 +1,47 @@
 package games.model;
 
+import games.model.token.MoveLock;
+import games.model.token.Token;
+import games.model.token.TokenType;
+
 import java.util.ArrayList;
 
 public class BoardSquare {
 
 	private static final int MAX_SIZE = 10;
-	private ArrayList<GameObject> gameObjects = new ArrayList<>(MAX_SIZE);
+	private ArrayList<Token> tokens = new ArrayList<>(MAX_SIZE);
 
-	public void addObject(GameObject gameObject) {
-		gameObjects.add(gameObject);
-		if(gameObjects.size() > MAX_SIZE) {
-			throw new RuntimeException("Too many objects on one BoardSquare while trying to add: " + gameObject + ". Current objects: " + gameObjects);
+	public void addToken(Token token) {
+		tokens.add(token);
+		if(tokens.size() > MAX_SIZE) {
+			throw new RuntimeException("Too many tokens on one BoardSquare while trying to add: " + token + ". Current tokens: " + tokens);
 		}
 	}
 
-	public void removeObject(GameObject gameObject) {
-		if(!gameObjects.remove(gameObject)) {
-			throw new RuntimeException("Could not remove object from BoardSquare: " + gameObject);
+	public void removeToken(Token token) {
+		if(!tokens.remove(token)) {
+			throw new RuntimeException("Could not remove token from BoardSquare: " + token);
 		}
 	}
 
-	public GameObject removeMoveLock() {
-		for(int i = 0; i < gameObjects.size(); i++) {
-			if(GameObjectType.MOVE_LOCK.equals(gameObjects.get(i).getGameObjectType())) {
-				return gameObjects.remove(i);
+	public MoveLock removeMoveLock() {
+		for(int i = 0; i < tokens.size(); i++) {
+			if(TokenType.MOVE_LOCK.equals(tokens.get(i).getTokenType())) {
+				return (MoveLock) tokens.remove(i);
 			}
 		}
 		throw new RuntimeException("No move lock present");
 	}
 
-	public ArrayList<GameObject> getGameObjects() {
-		return gameObjects;
+	public ArrayList<Token> getTokens() {
+		return tokens;
 	}
 
 	public boolean containsBlockingObjects() {
-		for(GameObject gameObject : gameObjects) {
-			if(GameObjectType.MOVE_LOCK.equals(gameObject.getGameObjectType())
-					|| GameObjectType.WALL.equals(gameObject.getGameObjectType())
-					|| GameObjectType.TANK.equals(gameObject.getGameObjectType())
+		for(Token token : tokens) {
+			if(TokenType.MOVE_LOCK.equals(token.getTokenType())
+					|| TokenType.WALL.equals(token.getTokenType())
+					|| TokenType.TANK.equals(token.getTokenType())
 					) {
 				return true;
 			}
@@ -46,7 +50,7 @@ public class BoardSquare {
 	}
 
 	public void clear() {
-		gameObjects.forEach(GameObjectPool.INSTANCE::returnToPool);
-		gameObjects.clear();
+		tokens.forEach(TokenPool.INSTANCE::returnToPool);
+		tokens.clear();
 	}
 }

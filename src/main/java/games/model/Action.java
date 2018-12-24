@@ -11,7 +11,6 @@ import lombok.ToString;
 @ToString
 public class Action {
 
-	private static final int MISSILE_MAX_MOVE_FRAMES = 1;
 	private static final int TANK_MAX_MOVE_FRAMES = 6;
 	private static final int TANK_MAX_SHOT_FRAMES = 12;
 
@@ -21,6 +20,9 @@ public class Action {
 
 	public void increaseCurrentFrame() {
 		currentFrame++;
+		if(currentFrame > maxFrame) {
+			currentFrame = currentFrame % maxFrame;
+		}
 	}
 
 	public boolean isLastFrame() {
@@ -28,15 +30,9 @@ public class Action {
 	}
 
 	public void initTankMoveOut() {
-		actionType = ActionType.MOVE_OUT;
+		actionType = ActionType.MOVE;
 		currentFrame = 0;
 		maxFrame = TANK_MAX_MOVE_FRAMES;
-	}
-
-	public void initMissileMoveOut() {
-		actionType = ActionType.MOVE_OUT;
-		currentFrame = 0;
-		maxFrame = MISSILE_MAX_MOVE_FRAMES;
 	}
 
 	public void initTankTurn(ActionType turnType) {
@@ -64,23 +60,5 @@ public class Action {
 		actionType = ActionType.NONE;
 		currentFrame = 0;
 		maxFrame = 0;
-	}
-
-	public void transitionToMissileMoveIn() {
-		actionType = ActionType.MOVE_IN;
-		currentFrame = 1;
-		maxFrame = MISSILE_MAX_MOVE_FRAMES;
-	}
-
-	public void transitionToMissileMoveOut() {
-		actionType = ActionType.MOVE_OUT;
-		currentFrame = 1;
-		maxFrame = MISSILE_MAX_MOVE_FRAMES;
-	}
-
-	public void transitionToTankMoveIn() {
-		actionType = ActionType.MOVE_IN;
-		currentFrame = 1;
-		maxFrame = TANK_MAX_MOVE_FRAMES;
 	}
 }

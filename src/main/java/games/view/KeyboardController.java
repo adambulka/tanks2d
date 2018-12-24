@@ -1,6 +1,7 @@
 package games.view;
 
 import games.model.*;
+import games.model.token.Tank;
 import games.network.Client;
 
 import java.awt.event.KeyEvent;
@@ -51,11 +52,11 @@ public class KeyboardController implements KeyListener {
 	}
 
 	private void turnOrMove(Direction direction) {
-		GameObject tank = currentBoard.getPlayer(player);
+		Tank tank = currentBoard.getPlayer(player);
 		ActionType newAction;
 		if(tank != null && tank.canPerformNewAction()) {
 			if(direction.equals(tank.getDirection())) {
-				newAction = ActionType.MOVE_OUT;
+				newAction = ActionType.MOVE;
 			} else {
 				newAction = Direction.directionToTurnAction(direction);
 			}
@@ -69,7 +70,7 @@ public class KeyboardController implements KeyListener {
 	}
 
 	private void shot() {
-		GameObject tank = currentBoard.getPlayer(player);
+		Tank tank = currentBoard.getPlayer(player);
 		ActionType newAction;
 		if(tank != null && tank.canPerformNewAction()) {
 			newAction = ActionType.SHOT;
