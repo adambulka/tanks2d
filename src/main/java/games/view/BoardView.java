@@ -9,7 +9,7 @@ import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.Map;
 
 public class BoardView extends JPanel {
@@ -25,8 +25,8 @@ public class BoardView extends JPanel {
 	private BufferedImage tankImage;
 	private BufferedImage missileImage;
 
-	private Map<Affiliation, BufferedImage> affiliationToTankImage = new HashMap<>();
-	private Map<Affiliation, BufferedImage> affiliationToMissileImage = new HashMap<>();
+	private Map<Affiliation, BufferedImage> affiliationToTankImage = new EnumMap<>(Affiliation.class);
+	private Map<Affiliation, BufferedImage> affiliationToMissileImage = new EnumMap<>(Affiliation.class);
 
 	private Board board;
 

@@ -8,15 +8,13 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
 
 public class Server {
 
-	private static final int SERVER_LISTEN_PORT = 8085;
-	private static final int CLIENT_LISTEN_PORT = 8088;
-	private static final int BUFFER_LENGHT = 1000;
 	private static final int MAX_PLAYERS = 2;
 	private static final int CYCLE_PERIOD_MILLIS = 50;
 
@@ -27,28 +25,31 @@ public class Server {
 	private DatagramSocket serverSocket;
 	private DatagramSocket syncSocket;
 
+	private int serverListenPort;
+
 	private Map<InetAddress, Affiliation> addressToPlayer = new HashMap<>(MAX_PLAYERS);
 
-	private Map<Affiliation, ActionType> currentActions = new HashMap<>(MAX_PLAYERS);
-	private Map<Affiliation, ActionType> prevActions = new HashMap<>(MAX_PLAYERS);
+	private Map<Affiliation, ActionType> currentActions = new EnumMap<>(Affiliation.class);
+	private Map<Affiliation, ActionType> prevActions = new EnumMap<>(Affiliation.class);
 
 	private Serializer serializer = new Serializer();
 
-	private byte[] syncbuf = new byte[10000];
+	private byte[] syncBuf = new byte[Protocol.SYNC_BUFFER_LENGHT];
 
 	public Server() {
+		this(Protocol.DEFAULT_SERVER_LISTEN_PORT);
+	}
+
+	public Server(int serverListenPort) {
+		this.serverListenPort = serverListenPort;
 		initServer();
 		try {
-			serverSocket = new DatagramSocket(SERVER_LISTEN_PORT);
+			serverSocket = new DatagramSocket(serverListenPort);
 			syncSocket = new DatagramSocket();
 			listen();
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
-	}
-
-	public Board getBoard() {
-		return board;
 	}
 
 	private void initServer() {
@@ -78,11 +79,12 @@ public class Server {
 
 	private void syncBoardToClients() {
 		StringBuilder sb = serializer.serializeBoard(board);
-		sb.insert(0, Protocol.SYNC.getBeginText());
-		writeToBuffer(syncbuf, sb);
+		DatagramPacket syncPacket = new DatagramPacket(syncBuf, sb.length());
+		Protocol.prepareMsg(syncPacket, Protocol.PacketType.SYNC, sb.toString());
 		for(InetAddress clientAddress : addressToPlayer.keySet()) {
 			try {
-				DatagramPacket syncPacket = new DatagramPacket(syncbuf, sb.length(), clientAddress, CLIENT_LISTEN_PORT);
+				syncPacket.setAddress(clientAddress);
+				syncPacket.setPort(Protocol.DEFAULT_CLIENT_LISTEN_PORT);
 				syncSocket.send(syncPacket);
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -90,34 +92,22 @@ public class Server {
 		}
 	}
 
-	private void writeToBuffer(byte[] buf, StringBuilder sb) {
-		for(int i = 0; i < sb.length(); i++) {
-			buf[i] = (byte) sb.charAt(i);
-		}
-	}
-
-	private void writeToBuffer(byte[] buf, String s) {
-		for(int i = 0; i < s.length(); i++) {
-			buf[i] = (byte) s.charAt(i);
-		}
-	}
-
 	private void listen() throws IOException {
-		byte[] receiveBuf = new byte[BUFFER_LENGHT];
+		byte[] receiveBuf = new byte[Protocol.MSG_BUFFER_LENGHT];
 		DatagramPacket receivePacket = new DatagramPacket(receiveBuf, receiveBuf.length);
-		byte[] sendBuf = new byte[BUFFER_LENGHT];
+		byte[] sendBuf = new byte[Protocol.MSG_BUFFER_LENGHT];
 		DatagramPacket responsePacket = new DatagramPacket(sendBuf, sendBuf.length);
 		System.out.println("Server start listening");
 		while(true) {
 			serverSocket.receive(receivePacket);
 			InetAddress clientAddress = receivePacket.getAddress();
-			Protocol protocol = Protocol.readPacketType(receivePacket);
+			Protocol.PacketType packetType = Protocol.readPacketType(receivePacket);
 			try {
-				switch (protocol) {
+				switch (packetType) {
 					case JOIN:
 						//TODO check game version
 						if(addressToPlayer.containsKey(clientAddress)) {
-							sendResponse(responsePacket, clientAddress, Protocol.JOINED, addressToPlayer.get(clientAddress).getValue());
+							sendResponse(responsePacket, clientAddress, Protocol.PacketType.JOINED, addressToPlayer.get(clientAddress).getValue());
 						} else if (addressToPlayer.size() < MAX_PLAYERS) {
 							Affiliation newPlayer;
 							if (!addressToPlayer.values().contains(Affiliation.PLAYER1)) {
@@ -128,9 +118,9 @@ public class Server {
 								throw new RuntimeException("Less than two players but none free");
 							}
 							addressToPlayer.put(clientAddress, newPlayer);
-							sendResponse(responsePacket, clientAddress, Protocol.JOINED, newPlayer.getValue());
+							sendResponse(responsePacket, clientAddress, Protocol.PacketType.JOINED, newPlayer.getValue());
 						} else {
-							sendResponse(responsePacket, clientAddress, Protocol.DENY, "Server is full");
+							sendResponse(responsePacket, clientAddress, Protocol.PacketType.DENY, "Server is full");
 						}
 						break;
 					case LEAVE:
@@ -156,14 +146,14 @@ public class Server {
 		}
 	}
 
-	private void sendResponse(DatagramPacket responsePacket, InetAddress clientAddress, Protocol protocol, int message) throws IOException {
-		sendResponse(responsePacket, clientAddress, protocol, Integer.toString(message));
+	private void sendResponse(DatagramPacket responsePacket, InetAddress clientAddress, Protocol.PacketType packetType, int message) throws IOException {
+		sendResponse(responsePacket, clientAddress, packetType, Integer.toString(message));
 	}
 
-	private void sendResponse(DatagramPacket responsePacket, InetAddress clientAddress, Protocol protocol, String message) throws IOException {
+	private void sendResponse(DatagramPacket responsePacket, InetAddress clientAddress, Protocol.PacketType packetType, String message) throws IOException {
 		responsePacket.setAddress(clientAddress);
-		responsePacket.setPort(CLIENT_LISTEN_PORT);
-		Protocol.prepareMsg(responsePacket, protocol, message);
+		responsePacket.setPort(Protocol.DEFAULT_CLIENT_LISTEN_PORT);
+		Protocol.prepareMsg(responsePacket, packetType, message);
 		serverSocket.send(responsePacket);
 	}
 }

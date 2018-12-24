@@ -16,10 +16,6 @@ import java.util.concurrent.TimeUnit;
 
 public class Client {
 
-	private static final int SERVER_LISTEN_PORT = 8085;
-	private static final int CLIENT_LISTEN_PORT = 8088;
-	private static final int BUFFER_LENGHT = 1000;
-
 	private Board currentBoard;
 	private Board nextBoard;
 
@@ -27,10 +23,13 @@ public class Client {
 	private DatagramSocket sendSocket;
 
 	private InetAddress serverAddress;
+	private int serverListenPort;
+	private int clienListenPort;
 
 	private Serializer serializer = new Serializer();
 
-	private byte[] syncbuf = new byte[10000];
+	private byte[] syncBuf = new byte[Protocol.SYNC_BUFFER_LENGHT];
+	private byte[] sendBuf = new byte[Protocol.MSG_BUFFER_LENGHT];
 
 	private ScheduledExecutorService sender = Executors.newScheduledThreadPool(1);
 
@@ -39,12 +38,18 @@ public class Client {
 	private Window window;
 
 	public Client(InetAddress serverAddress) {
+		this(serverAddress, Protocol.DEFAULT_SERVER_LISTEN_PORT, Protocol.DEFAULT_CLIENT_LISTEN_PORT);
+	}
+
+	public Client(InetAddress serverAddress, int serverListenPort, int clientListenPort) {
 		this.serverAddress = serverAddress;
+		this.serverListenPort = serverListenPort;
+		this.clienListenPort = clientListenPort;
 		try {
 			currentBoard = new Board();
 			nextBoard = new Board();
 
-			listenSocket = new DatagramSocket(CLIENT_LISTEN_PORT);
+			listenSocket = new DatagramSocket(clientListenPort);
 			sendSocket = new DatagramSocket();
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -53,7 +58,7 @@ public class Client {
 
 	public void start() {
 		try {
-			sender.schedule(() -> send(Protocol.JOIN), 1, TimeUnit.SECONDS);
+			sender.schedule(() -> send(Protocol.PacketType.JOIN), 1, TimeUnit.SECONDS);
 			listen();
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -69,29 +74,28 @@ public class Client {
 	}
 
 	public void performAction(ActionType actionType) {
-		sender.schedule(() -> send(Protocol.ACTION, actionType.getValue()), 0, TimeUnit.MILLISECONDS);
+		sender.schedule(() -> send(Protocol.PacketType.ACTION, actionType.getValue()), 0, TimeUnit.MILLISECONDS);
 	}
 
 	public void leave() {
 		sender.schedule(() -> {
-			send(Protocol.LEAVE);
+			send(Protocol.PacketType.LEAVE);
 			window.dispose();
 			System.exit(0);
 		}, 0, TimeUnit.MILLISECONDS);
 	}
 
-	private void send(Protocol protocol) {
+	private void send(Protocol.PacketType protocol) {
 		send(protocol, "");
 	}
 
-	private void send(Protocol protocol, int message) {
-		send(protocol, Integer.toString(message));
+	private void send(Protocol.PacketType packetType, int message) {
+		send(packetType, Integer.toString(message));
 	}
 
-	private void send(Protocol protocol, String message) {
-		byte[] sendBuf = new byte[BUFFER_LENGHT];
-		DatagramPacket packet = new DatagramPacket(sendBuf, sendBuf.length, serverAddress, SERVER_LISTEN_PORT);
-		Protocol.prepareMsg(packet, protocol, message);
+	private void send(Protocol.PacketType packetType, String message) {
+		DatagramPacket packet = new DatagramPacket(sendBuf, sendBuf.length, serverAddress, serverListenPort);
+		Protocol.prepareMsg(packet, packetType, message);
 		try {
 			sendSocket.send(packet);
 		} catch (IOException e) {
@@ -100,16 +104,16 @@ public class Client {
 	}
 
 	private void listen() throws IOException {
-		DatagramPacket receivePacket = new DatagramPacket(syncbuf, syncbuf.length);
+		DatagramPacket receivePacket = new DatagramPacket(syncBuf, syncBuf.length);
 		while(true) {
 			listenSocket.receive(receivePacket);
-			Protocol protocol = Protocol.readPacketType(receivePacket);
+			Protocol.PacketType packetType = Protocol.readPacketType(receivePacket);
 			try {
-				switch (protocol) {
+				switch (packetType) {
 					case SYNC:
 						//System.out.println("Received sync package");
 						if(!Affiliation.NEUTRAL.equals(player)) {
-							serializer.deserializeToBoard(receivePacket.getData(), Protocol.SYNC.getBeginText().length(), nextBoard);
+							serializer.deserializeToBoard(receivePacket.getData(), Protocol.PacketType.SYNC.getBeginText().length(), nextBoard);
 							if (nextBoard.getCurrentCycle() >= currentBoard.getCurrentCycle()) {
 								Board temp = nextBoard;
 								nextBoard = currentBoard;

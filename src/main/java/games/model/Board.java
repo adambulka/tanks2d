@@ -2,10 +2,7 @@ package games.model;
 
 import games.model.token.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Top left corner of the board is x=0 and y=0 to avoid translation for graphics
@@ -18,7 +15,7 @@ public class Board {
 
 	private TokenPool tokenPool = TokenPool.INSTANCE;
 
-	private Map<Affiliation, Tank> playerToTank = new HashMap<>();
+	private Map<Affiliation, Tank> playerToTank = new EnumMap<>(Affiliation.class);
 
 	private long currentCycle = 0;
 
