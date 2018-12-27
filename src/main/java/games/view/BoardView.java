@@ -7,8 +7,7 @@ import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
-import java.awt.image.BufferedImage;
+import java.awt.image.*;
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -45,7 +44,8 @@ public class BoardView extends JPanel {
 		tankImage = loadImage("tank.bmp");
 		missileImage = loadImage("missile.bmp");
 
-		recolor(missileImage, NEUTRAL_COLOR);
+		tankImage = imageToBufferedImage(toTransparentImage(tankImage));
+		missileImage = imageToBufferedImage(toTransparentImage(missileImage));
 
 		BufferedImage tankP1Image = copyImage(tankImage);
 		recolor(tankP1Image, Color.GREEN);
@@ -66,6 +66,29 @@ public class BoardView extends JPanel {
 		affiliationToMissileImage.put(Affiliation.PLAYER2, missileP2Image);
 	}
 
+	private Image toTransparentImage(BufferedImage image) {
+		ImageFilter imageFilter = new RGBImageFilter() {
+			@Override
+			public int filterRGB(int x, int y, int rgb) {
+				if(WHITE == rgb) {
+					return TRANSLUCENT;
+				} else {
+					return rgb;
+				}
+			}
+		};
+		ImageProducer ip = new FilteredImageSource(image.getSource(), imageFilter);
+		return Toolkit.getDefaultToolkit().createImage(ip);
+	}
+
+	private BufferedImage imageToBufferedImage(Image image) {
+		BufferedImage bufferedImage = new BufferedImage(image.getWidth(null), image.getHeight(null), BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g2 = bufferedImage.createGraphics();
+		g2.drawImage(image, 0, 0, null);
+		g2.dispose();
+		return bufferedImage;
+	}
+
 	private BufferedImage copyImage(BufferedImage image) {
 		return new BufferedImage(image.getColorModel(), image.copyData(null), image.isAlphaPremultiplied(), null);
 	}
@@ -79,8 +102,6 @@ public class BoardView extends JPanel {
 			for(int j = 0; j < image.getHeight(); j++) {
 				if(NEUTRAL_COLOR == image.getRGB(i, j)) {
 					image.setRGB(i, j, color);
-				} else if(WHITE == image.getRGB(i, j)) {
-					image.setRGB(i, j, TRANSLUCENT);
 				}
 			}
 		}
