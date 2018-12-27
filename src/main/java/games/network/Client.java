@@ -113,6 +113,7 @@ public class Client {
 					case SYNC:
 						//System.out.println("Received sync package");
 						if(!Affiliation.NEUTRAL.equals(player)) {
+							nextBoard.clearBoard();
 							serializer.deserializeToBoard(receivePacket.getData(), Protocol.PacketType.SYNC.getBeginText().length(), nextBoard);
 							if (nextBoard.getCurrentCycle() >= currentBoard.getCurrentCycle()) {
 								Board temp = nextBoard;
@@ -120,7 +121,6 @@ public class Client {
 								currentBoard = temp;
 								window.drawBoard(currentBoard);
 							}
-							nextBoard.clearBoard();
 						}
 						break;
 					case JOINED:

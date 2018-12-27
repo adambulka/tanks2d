@@ -25,11 +25,13 @@ public class Window extends JFrame {
 	}
 
 	public void drawBoard(Board board) {
-		if(keyboardController != null) {
-			keyboardController.setBoard(board);
-		}
-		currentView.setBoard(board);
-		SwingUtilities.invokeLater(this::repaint);
+		SwingUtilities.invokeLater(() -> {
+			if(keyboardController != null) {
+				keyboardController.setBoard(board);
+			}
+			currentView.setBoard(board);
+			this.repaint();
+		});
 	}
 
 	public void setKeyboardController(KeyboardController keyboardController) {
