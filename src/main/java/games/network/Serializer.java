@@ -36,6 +36,10 @@ public class Serializer {
 		sb.append(token.getPosition().getX());
 		sb.append(',');
 		sb.append(token.getPosition().getY());
+		sb.append(',');
+		sb.append(token.getPosition().getDevX());
+		sb.append(',');
+		sb.append(token.getPosition().getDevY());
 		if(token instanceof Wall || token instanceof MoveLock) {
 			sb.append(TOKEN_END);
 		} else if(token instanceof Tank) {
@@ -70,10 +74,6 @@ public class Serializer {
 	private void serializeMovingToken(StringBuilder sb, MovingToken movingToken) {
 		sb.append(movingToken.getDirection().getValue());
 		sb.append(',');
-		sb.append(movingToken.getDevPosition().getX());
-		sb.append(',');
-		sb.append(movingToken.getDevPosition().getY());
-		sb.append(',');
 		sb.append(movingToken.getSpeed());
 	}
 
@@ -106,7 +106,11 @@ public class Serializer {
 		helper.currentIndex++;
 		int posX = readNumberUntil(helper, ',');
 		helper.currentIndex++;
-		int posY = readNumberUntil(helper, ',', TOKEN_END);
+		int posY = readNumberUntil(helper, ',');
+		helper.currentIndex++;
+		int devX = readNumberUntil(helper, ',');
+		helper.currentIndex++;
+		int devY = readNumberUntil(helper, ',', TOKEN_END);
 		switch (tokenType) {
 			case WALL:
 				board.addWall(posX, posY);
@@ -115,22 +119,18 @@ public class Serializer {
 				board.addMoveLock(posX, posY);
 				break;
 			case MISSILE:
-				deserializeMissile(helper, board, affiliation, posX, posY);
+				deserializeMissile(helper, board, affiliation, posX, posY, devX, devY);
 				break;
 			case TANK:
-				deserializeTank(helper, board, affiliation, posX, posY);
+				deserializeTank(helper, board, affiliation, posX, posY, devX, devY);
 				break;
 		}
 		helper.currentIndex++;
 	}
 
-	private void deserializeMissile(ByteBufferHelper helper, Board board, Affiliation affiliation, int posX, int posY) {
+	private void deserializeMissile(ByteBufferHelper helper, Board board, Affiliation affiliation, int posX, int posY, int devX, int devY) {
 		helper.currentIndex++;
 		Direction direction = Direction.getEnumForValue(readNumberUntil(helper, ','));
-		helper.currentIndex++;
-		int devX = readNumberUntil(helper, ',');
-		helper.currentIndex++;
-		int devY = readNumberUntil(helper, ',');
 		helper.currentIndex++;
 		int speed = readNumberUntil(helper, ',');
 		helper.currentIndex++;
@@ -139,13 +139,9 @@ public class Serializer {
 		board.addMissile(direction, affiliation, posX, posY, devX, devY);
 	}
 
-	private void deserializeTank(ByteBufferHelper helper, Board board, Affiliation affiliation, int posX, int posY) {
+	private void deserializeTank(ByteBufferHelper helper, Board board, Affiliation affiliation, int posX, int posY, int devX, int devY) {
 		helper.currentIndex++;
 		Direction direction = Direction.getEnumForValue(readNumberUntil(helper, ','));
-		helper.currentIndex++;
-		int devX = readNumberUntil(helper, ',');
-		helper.currentIndex++;
-		int devY = readNumberUntil(helper, ',');
 		helper.currentIndex++;
 		int speed = readNumberUntil(helper, ',');
 		helper.currentIndex++;

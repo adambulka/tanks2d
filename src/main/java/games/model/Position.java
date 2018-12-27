@@ -1,8 +1,6 @@
 package games.model;
 
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 
 @Getter
 @Setter
@@ -10,4 +8,7 @@ import lombok.ToString;
 public class Position {
 	private int x;
 	private int y;
+	//deviation from center of square, between -100 and 100
+	private int devX;
+	private int devY;
 }

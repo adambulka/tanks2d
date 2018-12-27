@@ -86,8 +86,7 @@ public class Board {
 		tank.getAction().setActionType(actionType);
 		tank.getAction().setCurrentFrame(currentFrame);
 		tank.getAction().setMaxFrame(maxFrame);
-		tank.setPosition(posX, posY);
-		tank.setDevPosition(devX, devY);
+		tank.setPosition(posX, posY, devX, devY);
 		squares[posX][posY].addToken(tank);
 
 		if(affiliation.isPlayer()) {
@@ -99,8 +98,7 @@ public class Board {
 		Missile missile = tokenPool.getMissile();
 		missile.setDirection(direction);
 		missile.setAffiliation(affiliation);
-		missile.setPosition(posX, posY);
-		missile.setDevPosition(devX, devY);
+		missile.setPosition(posX, posY, devX, devY);
 		squares[posX][posY].addToken(missile);
 	}
 
@@ -126,7 +124,7 @@ public class Board {
 	}
 
 	public void cycle(Map<Affiliation, ActionType> actions) {
-		processMoves(actions);
+		processPlayerMoves(actions);
 		gatherMovingObjects();
 		continueActions();
 		missileCollision();
@@ -138,7 +136,7 @@ public class Board {
 		currentCycle++;
 	}
 
-	private void processMoves(Map<Affiliation, ActionType> actions) {
+	private void processPlayerMoves(Map<Affiliation, ActionType> actions) {
 		for(Map.Entry entry : actions.entrySet()) {
 			Affiliation player = (Affiliation) entry.getKey();
 			ActionType actionType = (ActionType) entry.getValue();
@@ -216,24 +214,9 @@ public class Board {
 		tokenPool.returnToPool(token);
 		if(TokenType.TANK.equals(token.getTokenType())) {
 			Tank tank = (Tank) token;
-			if(ActionType.MOVE.equals(tank.getAction().getActionType())) {
-				int moveX = token.getPosition().getX();
-				int moveY = token.getPosition().getY();
-				switch (tank.getDirection()) {
-					case UP:
-						moveY--;
-						break;
-					case DOWN:
-						moveY++;
-						break;
-					case RIGHT:
-						moveX++;
-						break;
-					case LEFT:
-						moveX--;
-						break;
-				}
-				MoveLock moveLock = squares[moveX][moveY].removeMoveLock();
+			if(ActionType.MOVE.equals(tank.getAction().getActionType()) && tank.isMovingOut()) {
+				Position nextPosition = nextSquarePosition(tank.getDirection(), tank.getPosition());
+				MoveLock moveLock = squares[nextPosition.getX()][nextPosition.getY()].removeMoveLock();
 				tokenPool.returnToPool(moveLock);
 			}
 			if(token.getAffiliation().isPlayer()) {
@@ -254,26 +237,16 @@ public class Board {
 	}
 
 	private void continueActionMissile(Missile missile) {
-		if(willChangeSquare(missile) && isOutOfBoundaries(missile.getDirection(), missile.getPosition().getX(), missile.getPosition().getY())) {
+		Position nextPosition = missile.calculateNextPosition();
+		if(isOutOfBoundaries(nextPosition)) {
 			removalList.add(missile);
 		} else {
-			moveDev(missile);
+			moveToPosition(missile, nextPosition);
 		}
 	}
 
-	private boolean isOutOfBoundaries(Direction direction, int posX, int posY) {
-		int moveX = posX;
-		int moveY = posY;
-		if(Direction.DOWN.equals(direction)) {
-			moveY++;
-		} else if(Direction.UP.equals(direction)) {
-			moveY--;
-		} else if(Direction.LEFT.equals(direction)) {
-			moveX--;
-		} else if(Direction.RIGHT.equals(direction)) {
-			moveX++;
-		}
-		return moveX < 0 || moveY < 0 || moveX >= BOARD_LENGHT || moveY >= BOARD_LENGHT;
+	private boolean isOutOfBoundaries(Position pos) {
+		return pos.getX() < 0 || pos.getY() < 0 || pos.getX() >= BOARD_LENGHT || pos.getY() >= BOARD_LENGHT;
 	}
 
 	private void continueActionTank(Tank tank) {
@@ -287,12 +260,12 @@ public class Board {
 						return;
 					}
 				}
-				if(willPassSquareCenter(tank)) {
+				if(tank.willPassSquareCenter()) {
 					action.transitionToNone();
 					tank.setDevPosition(0, 0);
 				} else {
 					action.increaseCurrentFrame();
-					moveDev(tank);
+					moveToPosition(tank, tank.calculateNextPosition());
 				}
 				break;
 			case TURN_UP:
@@ -324,136 +297,50 @@ public class Board {
 		}
 	}
 
-	private boolean willPassSquareCenter(MovingToken movingToken) {
-		int devX = movingToken.getDevPosition().getX();
-		int devY = movingToken.getDevPosition().getY();
-		switch (movingToken.getDirection()) {
-			case DOWN:
-				if(devY < 0 && devY + movingToken.getSpeed() >= 0) {
-					return true;
-				}
-				break;
-			case UP:
-				if(devY > 0 && devY - movingToken.getSpeed() <= 0) {
-					return true;
-				}
-				break;
-			case RIGHT:
-				if(devX < 0 && devX + movingToken.getSpeed() >= 0) {
-					return true;
-				}
-				break;
-			case LEFT:
-				if(devX > 0 && devX - movingToken.getSpeed() <= 0) {
-					return true;
-				}
-				break;
-		}
-		return false;
-	}
-
-	private boolean willChangeSquare(MovingToken movingToken) {
-		int devX = movingToken.getDevPosition().getX();
-		int devY = movingToken.getDevPosition().getY();
-		switch (movingToken.getDirection()) {
-			case DOWN:
-				if(devY + movingToken.getSpeed() >= 100) {
-					return true;
-				}
-				break;
-			case UP:
-				if(devY - movingToken.getSpeed() <= -100) {
-					return true;
-				}
-				break;
-			case RIGHT:
-				if(devX + movingToken.getSpeed() >= 100) {
-					return true;
-				}
-				break;
-			case LEFT:
-				if(devX - movingToken.getSpeed() <= -100) {
-					return true;
-				}
-				break;
-		}
-		return false;
-	}
-
-	private void moveDev(MovingToken movingToken) {
-		int devX = movingToken.getDevPosition().getX();
-		int devY = movingToken.getDevPosition().getY();
-		switch (movingToken.getDirection()) {
-			case DOWN:
-				devY = devY + movingToken.getSpeed();
-				break;
-			case UP:
-				devY = devY - movingToken.getSpeed();
-				break;
-			case RIGHT:
-				devX = devX + movingToken.getSpeed();
-				break;
-			case LEFT:
-				devX = devX - movingToken.getSpeed();
-				break;
-		}
-		if(devY > 100) {
-			devY = devY - 200;
-			moveSquare(movingToken);
-		} else if(devY < -100) {
-			devY = 200 + devY;
-			moveSquare(movingToken);
-		} else if(devX > 100) {
-			devX = devX - 200;
-			moveSquare(movingToken);
-		} else if(devX < -100) {
-			devX = 200 + devX;
-			moveSquare(movingToken);
-		}
-		movingToken.setDevPosition(devX, devY);
-	}
-
-	private void moveSquare(MovingToken movingToken) {
+	private void moveToPosition(MovingToken movingToken, Position position) {
 		int x = movingToken.getPosition().getX();
 		int y = movingToken.getPosition().getY();
-		squares[x][y].removeToken(movingToken);
-		if(Direction.DOWN.equals(movingToken.getDirection())) {
-			y++;
-		} else if(Direction.UP.equals(movingToken.getDirection())) {
-			y--;
-		} else if(Direction.LEFT.equals(movingToken.getDirection())) {
-			x--;
-		} else if(Direction.RIGHT.equals(movingToken.getDirection())) {
-			x++;
-		}
-		movingToken.setPosition(x, y);
-		squares[x][y].addToken(movingToken);
-		if(TokenType.TANK.equals(movingToken.getTokenType())) {
-			MoveLock moveLock = squares[x][y].removeMoveLock();
-			tokenPool.returnToPool(moveLock);
+		int nextX = position.getX();
+		int nextY = position.getY();
+		movingToken.setPosition(nextX, nextY, position.getDevX(), position.getDevY());
+		if(x != nextX || y != nextY) {
+			squares[x][y].removeToken(movingToken);
+			squares[nextX][nextY].addToken(movingToken);
+			if(TokenType.TANK.equals(movingToken.getTokenType())) {
+				MoveLock moveLock = squares[nextX][nextY].removeMoveLock();
+				tokenPool.returnToPool(moveLock);
+			}
 		}
 	}
 
 	private boolean tryMoveTankWithLock(Tank tank) {
-		int x = tank.getPosition().getX();
-		int y = tank.getPosition().getY();
-		if(Direction.DOWN.equals(tank.getDirection())) {
-			y++;
-		} else if(Direction.UP.equals(tank.getDirection())) {
-			y--;
-		} else if(Direction.LEFT.equals(tank.getDirection())) {
-			x--;
-		} else if(Direction.RIGHT.equals(tank.getDirection())) {
-			x++;
-		}
-		if(x < 0 || y < 0 || x >= BOARD_LENGHT || y >= BOARD_LENGHT) {
+		Position nextPosition = nextSquarePosition(tank.getDirection(), tank.getPosition());
+		if(isOutOfBoundaries(nextPosition)) {
 			return false;
 		}
-		if(squares[x][y].containsBlockingObjects()) {
+		if(squares[nextPosition.getX()][nextPosition.getY()].containsMovementBlockingTokens()) {
 			return false;
 		} else {
-			addMoveLock(x, y);
+			addMoveLock(nextPosition.getX(), nextPosition.getY());
 			return true;
 		}
+	}
+
+	private Position nextSquarePosition(Direction direction, Position position) {
+		int x = position.getX();
+		int y = position.getY();
+		Position nextPosition = new Position();
+		if(Direction.DOWN.equals(direction)) {
+			y++;
+		} else if(Direction.UP.equals(direction)) {
+			y--;
+		} else if(Direction.LEFT.equals(direction)) {
+			x--;
+		} else if(Direction.RIGHT.equals(direction)) {
+			x++;
+		}
+		nextPosition.setX(x);
+		nextPosition.setY(y);
+		return nextPosition;
 	}
 }

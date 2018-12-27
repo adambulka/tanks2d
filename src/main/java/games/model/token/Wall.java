@@ -5,7 +5,7 @@ import games.model.Affiliation;
 public class Wall extends Token {
 
 	public Wall() {
-		super(TokenType.WALL);
+		super(TokenType.WALL, true);
 		setAffiliation(Affiliation.NEUTRAL);
 	}
 }

@@ -12,7 +12,7 @@ public class Missile extends MovingToken {
 	private int shotStrenght;
 
 	public Missile() {
-		super(TokenType.MISSILE);
+		super(TokenType.MISSILE, false);
 		this.setSpeed(50);
 	}
 }

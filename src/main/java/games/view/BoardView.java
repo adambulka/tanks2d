@@ -192,10 +192,10 @@ public class BoardView extends JPanel {
 	}
 
 	private int getDrawX(MovingToken movingToken) {
-		return movingToken.getPosition().getX() * SQUARE_SIZE_PIXELS + movingToken.getDevPosition().getX() * SQUARE_SIZE_PIXELS / 200;
+		return movingToken.getPosition().getX() * SQUARE_SIZE_PIXELS + movingToken.getPosition().getDevX() * SQUARE_SIZE_PIXELS / 200;
 	}
 
 	private int getDrawY(MovingToken movingToken) {
-		return movingToken.getPosition().getY() * SQUARE_SIZE_PIXELS + movingToken.getDevPosition().getY() * SQUARE_SIZE_PIXELS / 200;
+		return movingToken.getPosition().getY() * SQUARE_SIZE_PIXELS + movingToken.getPosition().getDevY() * SQUARE_SIZE_PIXELS / 200;
 	}
 }

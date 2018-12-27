@@ -37,12 +37,9 @@ public class BoardSquare {
 		return tokens;
 	}
 
-	public boolean containsBlockingObjects() {
+	public boolean containsMovementBlockingTokens() {
 		for(Token token : tokens) {
-			if(TokenType.MOVE_LOCK.equals(token.getTokenType())
-					|| TokenType.WALL.equals(token.getTokenType())
-					|| TokenType.TANK.equals(token.getTokenType())
-					) {
+			if(token.isBlockingMovement()) {
 				return true;
 			}
 		}

@@ -17,7 +17,7 @@ public class Tank extends MovingToken {
 	private int shotStrenght;
 
 	public Tank() {
-		super(TokenType.TANK);
+		super(TokenType.TANK, true);
 		this.action = new Action(ActionType.NONE, 0, 0);
 		this.setSpeed(10);
 	}
